@@ -224,6 +224,37 @@
 - **订单取消与回补**：`UserOrderService.cancelOrder` 以 `@Transactional` 包裹取数、库存回补与状态更新，具体的库存增量 SQL、订单状态写入由 `UserOrderMapper` 完成，确保数据库层面原子恢复库存。【F:sky-server/src/main/java/com/sky/service/UserOrderService.java†L17-L78】【F:sky-server/src/main/resources/mapper/UserOrderMapper.xml†L7-L138】
 - **分页查询复用**：订单列表查询在 Service 内负责分页参数与乘客聚合，MyBatis Mapper 侧完成统计与订单头分页 SQL，从而复用同一 Mapper 满足接口与报表需求。【F:sky-server/src/main/java/com/sky/service/UserOrderService.java†L45-L78】【F:sky-server/src/main/resources/mapper/UserOrderMapper.xml†L74-L138】
 
+### 3.10 主要 API 调用流程
+
+> 以下流程以用户侧接口为例，串联 **Controller → Service → Mapper → 数据表** 的调用路径，帮助理解一次请求在后端与数据库之间的传递关系。
+
+#### 3.10.1 航班搜索与城市提示
+
+1. **请求入口**：前端通过 `GET /user/flights/search` 传入出发地、目的地、出行日期及分页参数，`UserFlightSearchController.search` 接收后委托 Service 处理并返回分页结果。【F:sky-server/src/main/java/com/sky/controller/UserFlightSearchController.java†L26-L44】
+2. **业务层处理**：`UserFlightSearchService.search` 负责计算分页偏移量、构造当天的起止时间窗口，并调用 Mapper 分别获取总数和列表数据。【F:sky-server/src/main/java/com/sky/service/UserFlightSearchService.java†L22-L39】
+3. **数据库交互**：`UserFlightSearchMapper` 中的 `countByCitiesAndDate` 与 `selectByCitiesAndDate` SQL 关联 `flight`、`airline`、`airport`、`flight_seat_inventory` 等表，统计满足条件的航班数量并聚合舱位价格与余票总数。【F:sky-server/src/main/resources/mapper/UserFlightSearchMapper.xml†L18-L59】
+4. **城市联想**：若需要城市下拉提示，前端调用 `GET /user/flights/cities`，Controller 直接转发到 Service，再由 Mapper 从 `airport` 表去重城市名称并支持关键字模糊匹配。【F:sky-server/src/main/java/com/sky/controller/UserFlightSearchController.java†L40-L44】【F:sky-server/src/main/java/com/sky/service/UserFlightSearchService.java†L41-L43】【F:sky-server/src/main/resources/mapper/UserFlightSearchMapper.xml†L61-L70】
+
+#### 3.10.2 航班详情查询与下单
+
+1. **航班详情**：`GET /user/book?flightId=` 由 `UserBookController.detail` 转发到 `UserBookService.detail`，后者调用 `UserBookMapper.getFlightDetailById` 和嵌套查询 `getSeatTypesByFlightId` 返回航班基础信息、舱位价格及余票状态，数据分别来自 `flight`、`airline`、`airport`、`flight_seat_inventory`、`seat_type` 表。【F:sky-server/src/main/java/com/sky/controller/UserBookController.java†L23-L31】【F:sky-server/src/main/java/com/sky/service/UserBookService.java†L24-L27】【F:sky-server/src/main/resources/mapper/UserBookMapper.xml†L23-L65】
+2. **创建订单**：`POST /user/book` 请求体包含航班 ID、舱位、乘客信息，`UserBookController.book` 将当前登录用户写入 DTO 后交给 Service。【F:sky-server/src/main/java/com/sky/controller/UserBookController.java†L33-L38】
+3. **事务编排**：`UserBookService.book` 在事务中依次执行乘客档案查建（`passenger` 表）、舱位库存扣减（更新 `flight_seat_inventory.available`）、写入订单头 `booking_order` 与订单明细 `booking_order_item`，最后回查乘客信息封装响应。【F:sky-server/src/main/java/com/sky/service/UserBookService.java†L31-L87】【F:sky-server/src/main/resources/mapper/UserBookMapper.xml†L67-L136】
+4. **库存与价格确认**：若前端未指定舱位，Service 会列出全部可售舱位选项并择优选择可满足人数的最优价舱位，再调用 `decreaseAvailable` 做行级条件更新，确保库存扣减不会超卖。【F:sky-server/src/main/java/com/sky/service/UserBookService.java†L51-L75】【F:sky-server/src/main/resources/mapper/UserBookMapper.xml†L71-L110】
+
+#### 3.10.3 订单列表与取消流程
+
+1. **订单分页**：`GET /user/orders/list` 在 `UserOrderController.list` 中读取当前用户并调用 `UserOrderService.listOrders`。【F:sky-server/src/main/java/com/sky/controller/UserOrderController.java†L21-L34】
+2. **聚合逻辑**：Service 计算分页范围后，通过 Mapper 查询订单总数、分页订单头，再批量拉取乘客并按订单聚合，最终返回包含乘客列表的 `PageResult`。【F:sky-server/src/main/java/com/sky/service/UserOrderService.java†L53-L92】【F:sky-server/src/main/resources/mapper/UserOrderMapper.xml†L33-L138】
+3. **取消订单**：`POST /user/orders/{orderId}/cancel` 由 Controller 调用 `UserOrderService.cancelOrder`，Service 先读取订单状态，针对已确认订单循环回补 `flight_seat_inventory.available`，最后更新 `booking_order.status` 为取消。【F:sky-server/src/main/java/com/sky/controller/UserOrderController.java†L36-L42】【F:sky-server/src/main/java/com/sky/service/UserOrderService.java†L20-L46】【F:sky-server/src/main/resources/mapper/UserOrderMapper.xml†L7-L29】
+
+#### 3.10.4 常用乘客管理
+
+1. **新增/更新/删除**：`UserPassengerController` 暴露 `POST /user/passengers`、`PUT /user/passengers/{id}`、`DELETE /user/passengers/{id}` 等接口，统一从登录上下文写入 `userId`，并交由 `UserPassengerService` 执行写库操作。【F:sky-server/src/main/java/com/sky/controller/UserPassengerController.java†L18-L45】
+2. **Service 行为**：`UserPassengerService` 调用 Mapper 将请求映射为 `passenger` 表的插入、更新、删除，并在更新/删除失败时抛出异常提示归属校验未通过。【F:sky-server/src/main/java/com/sky/service/UserPassengerService.java†L18-L43】【F:sky-server/src/main/resources/mapper/UserPassengerMapper.xml†L14-L33】
+3. **查询能力**：列表接口 `GET /user/passengers` 支持关键字搜索和分页，Mapper 对 `passenger` 表做模糊匹配；单个详情和证件号查重接口则使用主键与唯一键组合保障只访问当前用户的数据。【F:sky-server/src/main/java/com/sky/controller/UserPassengerController.java†L47-L64】【F:sky-server/src/main/java/com/sky/service/UserPassengerService.java†L45-L58】【F:sky-server/src/main/resources/mapper/UserPassengerMapper.xml†L34-L78】
+
+
 ## 4. 开发与运维指引
 
 ### 4.1 初始化数据库
