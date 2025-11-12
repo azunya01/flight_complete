@@ -217,6 +217,13 @@
 - **用户订单概览**：`SELECT user_id, COUNT(*) AS orders, SUM(total_amount) AS revenue FROM booking_order GROUP BY user_id;` 结合应用服务分页接口可构建用户画像。
 - **乘客复用率**：`SELECT user_id, COUNT(DISTINCT id_no) AS passengers FROM passenger GROUP BY user_id;` 观测乘客档案覆盖度，为产品优化提供依据。
 
+### 3.9 Java 层数据库操作实现
+
+- **搜索与航班详情聚合**：`UserFlightSearchMapper`、`UserBookMapper` 通过 MyBatis XML Mapper 将航班、机场与库存表的多表 join 封装成 SQL 语句，Service 端直接以 VO 返回分页结果与舱位详情，避免在业务层手写 SQL。【F:sky-server/src/main/resources/mapper/UserFlightSearchMapper.xml†L1-L70】【F:sky-server/src/main/resources/mapper/UserBookMapper.xml†L1-L136】
+- **下单流程编排**：`UserBookService.book` 在单个事务中执行乘客建档、舱位库存扣减、订单头/明细写入与回显，保证数据库状态一致；该方法优先判断乘客是否已存在，若缺失则调用 Mapper 新建记录并继续下单。【F:sky-server/src/main/java/com/sky/service/UserBookService.java†L21-L103】【F:sky-server/src/main/resources/mapper/UserBookMapper.xml†L67-L135】
+- **订单取消与回补**：`UserOrderService.cancelOrder` 以 `@Transactional` 包裹取数、库存回补与状态更新，具体的库存增量 SQL、订单状态写入由 `UserOrderMapper` 完成，确保数据库层面原子恢复库存。【F:sky-server/src/main/java/com/sky/service/UserOrderService.java†L17-L78】【F:sky-server/src/main/resources/mapper/UserOrderMapper.xml†L7-L138】
+- **分页查询复用**：订单列表查询在 Service 内负责分页参数与乘客聚合，MyBatis Mapper 侧完成统计与订单头分页 SQL，从而复用同一 Mapper 满足接口与报表需求。【F:sky-server/src/main/java/com/sky/service/UserOrderService.java†L45-L78】【F:sky-server/src/main/resources/mapper/UserOrderMapper.xml†L74-L138】
+
 ## 4. 开发与运维指引
 
 ### 4.1 初始化数据库
@@ -225,11 +232,13 @@
 2. 执行 `schema.sql` 导入结构与触发器（包含数据库创建语句，可直接运行）。
 3. 若需要基础数据，可参考 `CompletelyCreate.sql`（包含更多初始化脚本）。
 
-### 4.2 本地开发环境
+### 4.2 本地 Java 服务开发与运行
 
-1. 导入 Maven 项目：`sky-common`、`sky-pojo`、`sky-server`。
-2. 在 `sky-server/src/main/resources/application.yml`（或同目录配置文件）中设置数据库连接（用户名、密码、URL）。
-3. 启动 `sky-server` Spring Boot 应用，前端模块视需求启动。
+1. **模块依赖**：根 `pom.xml` 声明了 Java 17 与多模块结构，`sky-server` 作为运行入口依赖 `sky-common`、`sky-pojo`，并引入 Spring Boot、MyBatis、Redis、Druid 等组件；Spring Boot Maven 插件负责打包与运行生命周期。【F:pom.xml†L7-L147】【F:sky-server/pom.xml†L5-L128】
+2. **配置管理**：默认激活 `dev` Profile，连接信息通过 `sky.*` 自定义配置项注入 Druid 数据源与 Redis；复制 `application-dev.yml.example` 为 `application-dev.yml` 后按本地环境修改数据库与 Redis 连接参数即可运行。【F:sky-server/src/main/resources/application.yml†L4-L53】【F:sky-server/src/main/resources/application-dev.yml.example†L1-L13】
+3. **启动方式**：`SkyApplication` 为 Spring Boot 主类，已启用事务与缓存。开发阶段可执行 `mvn -pl sky-server spring-boot:run` 或在 IDE 直接运行 `SkyApplication.main`；打包发布可执行 `mvn -pl sky-server -am clean package` 生成可执行 JAR。【F:sky-server/src/main/java/com/sky/SkyApplication.java†L1-L18】【F:sky-server/pom.xml†L121-L126】
+4. **事务与数据库操作约定**：所有涉及多表写入的 Service（如下单、取消订单）均使用 `@Transactional`，Mapper 层集中存放 SQL，避免在 Service 直接拼接语句；新增数据库操作时优先扩展 Mapper XML，保持与现有结构一致。【F:sky-server/src/main/java/com/sky/service/UserBookService.java†L29-L103】【F:sky-server/src/main/java/com/sky/service/UserOrderService.java†L27-L78】【F:sky-server/src/main/resources/mapper/UserBookMapper.xml†L87-L135】【F:sky-server/src/main/resources/mapper/UserOrderMapper.xml†L7-L138】
+5. **调试建议**：利用 `application.yml` 中的日志级别配置，可在开发阶段开启 Mapper SQL 日志与 DispatcherServlet 调用链路，便于排查数据库交互问题；如需对特定 Mapper 调整级别，可在 Profile 配置中覆写日志设置。【F:sky-server/src/main/resources/application.yml†L33-L41】
 
 ### 4.3 数据一致性与调试建议
 
