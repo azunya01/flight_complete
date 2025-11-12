@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.UserBookMapper">
+
+    <!-- 映射到 UserFlightDetailVO（含 seatTypes 子集合） -->
+    <resultMap id="UserFlightDetailMap" type="com.sky.vo.UserFlightDetailVO">
+        <id     property="id"                     column="id"/>
+        <result property="name"                   column="name"/>
+        <result property="departureAirportName"   column="dep_airport_name"/>
+        <result property="arrivalAirportName"     column="arr_airport_name"/>
+        <result property="departureTime"          column="departure_time"/>
+        <result property="arrivalTime"            column="arrival_time"/>
+        <result property="leastPrice"             column="leastPrice"/>
+        <!-- 嵌套查询 seatTypes：把外层 id 作为 flightId 传入 -->
+        <collection property="seatTypes"
+                    ofType="com.sky.vo.UserSeatTypeVO"
+                    column="{flightId=id}"
+                    select="getSeatTypesByFlightId"/>
+    </resultMap>
+
+    <!-- 航班详情（基础信息 + 最低价） -->
+    <select id="getFlightDetailById" resultMap="UserFlightDetailMap">
+        <![CDATA[
+        SELECT
+            f.id,
+            f.name,
+            dep.name AS dep_airport_name,
+            arr.name AS arr_airport_name,
+            f.departure_time,
+            f.arrival_time,
+            (
+                SELECT MIN(fsi.price)
+                FROM flight_seat_inventory fsi
+                WHERE fsi.flight_id = f.id
+            ) AS leastPrice
+        FROM flight f
+                 JOIN airline a   ON a.id      = f.airline_id
+                 JOIN airport dep ON dep.name  = a.from_airport
+                 JOIN airport arr ON arr.name  = a.to_airport
+        WHERE f.id = #{id}
+        LIMIT 1
+        ]]>
+    </select>
+
+    <!-- 子查询：该航班的各舱位价格与是否有余票
+         - seatTypeName：舱位名（seat_type.name）
+         - price：这里取该舱位的 MIN(price)，若你的同舱位价格恒定也可用 MAX/ANY_VALUE
+         - haveAvailable：SUM(available)>0 则 1，否则 0 —— 直接别名为 haveAvailable 映射到 boolean
+    -->
+    <select id="getSeatTypesByFlightId" resultType="com.sky.vo.UserSeatTypeVO">
+        <![CDATA[
+
+        SELECT fsi.seat_type_id,
+            st.name                                       AS seatTypeName,
+               MIN(fsi.price)                                AS price,
+               IF(COALESCE(SUM(fsi.available), 0) > 0, 1, 0) AS haveAvailable
+        FROM flight_seat_inventory fsi
+                 JOIN seat_type st ON st.id = fsi.seat_type_id
+        WHERE fsi.flight_id = #{flightId}
+        GROUP BY st.name, fsi.seat_type_id
+        ORDER BY price, st.name
+        ]]>
+    </select>
+
+    <select id="getFlightNameById" resultType="string">
+        SELECT name FROM flight WHERE id = #{flightId} LIMIT 1
+    </select>
+
+    <select id="listSeatOptions" resultType="com.sky.dto.SeatOption">
+        SELECT seat_type_id AS seatTypeId,
+               available,
+               price
+        FROM flight_seat_inventory
+        WHERE flight_id = #{flightId}
+        ORDER BY price, seat_type_id
+    </select>
+
+    <select id="getSeatTypePrice" resultType="java.math.BigDecimal">
+        SELECT price
+        FROM flight_seat_inventory
+        WHERE flight_id = #{flightId} AND seat_type_id = #{seatTypeId}
+        LIMIT 1
+    </select>
+
+    <update id="decreaseAvailable">
+        UPDATE flight_seat_inventory
+        SET available = available - #{count}
+        WHERE flight_id = #{flightId}
+          AND seat_type_id = #{seatTypeId}
+          AND available >= #{count}
+    </update>
+
+    <insert id="insertOrder">
+        INSERT INTO booking_order(user_id, flight_id, status, total_amount)
+        VALUES(#{userId}, #{flightId}, #{status}, #{totalAmount})
+    </insert>
+
+    <select id="lastInsertId" resultType="long">
+        SELECT LAST_INSERT_ID()
+    </select>
+
+    <insert id="insertOrderItems">
+        INSERT INTO booking_order_item(order_id, flight_id, seat_type_id, price, passenger_id)
+        VALUES
+        <foreach collection="items" item="it" separator=",">
+            (#{orderId}, #{flightId}, #{seatTypeId}, #{price}, #{it.passengerId})
+        </foreach>
+    </insert>
+
+    <select id="getPassengersByIds" resultType="com.sky.vo.PassengerVO">
+        SELECT id, name, gender, id_no AS idNo, phone
+        FROM passenger
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">
+            #{id}
+        </foreach>
+    </select>
+
+
+    <!-- 用 userId + idNo 查乘客ID -->
+    <select id="findPassengerIdByUserAndIdNo" resultType="long">
+        SELECT id
+        FROM passenger
+        WHERE user_id = #{userId}
+          AND id_no  = #{idNo}
+        LIMIT 1
+    </select>
+
+    <!-- 不存在则创建乘客（使用自增主键） -->
+    <insert id="insertPassengerFromSnapshot">
+        INSERT INTO passenger (user_id, name, gender, id_no, phone, created_at)
+        VALUES (#{userId}, #{name}, #{gender}, #{idNo}, #{phone}, NOW())
+    </insert>
+</mapper>

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.UserOrderMapper">
+
+    <select id="getOrderBase" resultType="com.sky.entity.OrderBase">
+        SELECT flight_id AS flightId, status
+        FROM booking_order
+        WHERE id = #{orderId}
+    </select>
+
+    <select id="listSeatTypeIds" resultType="int">
+        SELECT seat_type_id
+        FROM booking_order_item
+        WHERE order_id = #{orderId}
+    </select>
+
+    <update id="increaseAvailable">
+        UPDATE flight_seat_inventory
+        SET available = available + 1
+        WHERE flight_id = #{flightId} AND seat_type_id = #{seatTypeId}
+    </update>
+
+    <update id="updateOrderStatus">
+        UPDATE booking_order
+        SET status = #{status}
+        WHERE id = #{orderId}
+    </update>
+
+
+
+    <!-- 订单头列表：
+         - seatTypeId: 若同一订单多舱，取 MIN(oi.seat_type_id) 代表
+         - price: 使用 booking_order.total_amount（如要展示单张价可改成 MIN/AVG(oi.price)） -->
+    <select id="listOrderHeaders" resultMap="OrderVOMap">
+        SELECT
+            st.name AS seatTypeName,
+            o.id              AS order_id,
+            o.flight_id       AS flight_id,
+            f.name            AS flight_name,
+            a.from_airport    AS from_airport,
+            a.to_airport      AS to_airport,
+            MIN(oi.seat_type_id) AS seat_type_id,
+            o.total_amount,
+            o.status,
+            o.created_at
+        FROM booking_order o
+                 JOIN flight  f ON f.id = o.flight_id
+                 JOIN airline a ON a.id = f.airline_id
+
+                 LEFT JOIN booking_order_item oi ON oi.order_id = o.id
+                 join seat_type st on st.id=oi.seat_type_id
+        WHERE o.user_id = #{userId}
+        GROUP BY o.id, o.flight_id, f.name, a.from_airport, a.to_airport, o.total_amount, o.status, o.created_at
+        ORDER BY o.id DESC
+    </select>
+
+
+    <!-- OrderVO 字段映射 -->
+    <resultMap id="OrderVOMap" type="com.sky.vo.OrderVO">
+        <id     property="orderId"     column="order_id"/>
+        <result property="flightId"    column="flight_id"/>
+        <result property="flightName"  column="flight_name"/>
+        <result property="from_airport" column="from_airport"/>
+        <result property="to_airport"   column="to_airport"/>
+        <result property="seatTypeId"  column="seat_type_id"/>
+        <result property="price"       column="total_amount"/>
+        <result property="status"      column="status"/>
+        <result property="createTime"  column="created_at"/>
+        <result property="seatTypeName" column="seatTypeName"/>
+    </resultMap>
+
+    <!-- 统计总数：按用户聚合订单头 -->
+    <select id="countOrdersByUser" resultType="long">
+        SELECT COUNT(*) FROM booking_order o
+        WHERE o.user_id = #{userId}
+    </select>
+
+    <!-- 分页订单头：
+         seatTypeId：若同订单多舱，取 MIN(oi.seat_type_id) 代表；
+         price：使用 booking_order.total_amount（整单金额）。 -->
+    <select id="listOrderHeadersPaged" resultMap="OrderVOMap">
+        SELECT
+            f.departure_time,
+            f.arrival_time,
+            o.id            AS order_id,
+            o.flight_id     AS flight_id,
+            f.name          AS flight_name,
+            a.from_airport  AS from_airport,
+            a.to_airport    AS to_airport,
+            ia.seat_type_id AS seat_type_id,
+            st.name         AS seatTypeName,
+            o.total_amount,
+            o.status,
+            o.created_at
+        FROM booking_order o
+                 JOIN flight  f ON f.id = o.flight_id
+                 JOIN airline a ON a.id = f.airline_id
+                 LEFT JOIN (
+            SELECT order_id, MIN(seat_type_id) AS seat_type_id
+            FROM booking_order_item
+            GROUP BY order_id
+        ) ia ON ia.order_id = o.id
+                 LEFT JOIN seat_type st ON st.id = ia.seat_type_id
+        WHERE o.user_id = #{userId}
+        ORDER BY o.id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+
+    <!-- 乘客行映射到内部类 -->
+    <resultMap id="OrderPassengerRowMap" type="com.sky.entity.OrderPassengerRow">
+        <result property="orderId" column="order_id"/>
+        <result property="id"      column="id"/>
+        <result property="name"    column="name"/>
+        <result property="gender"  column="gender"/>
+        <result property="idNo"    column="id_no"/>
+        <result property="phone"   column="phone"/>
+    </resultMap>
+
+    <!-- 批量查乘客 -->
+    <select id="listPassengersByOrderIds" resultMap="OrderPassengerRowMap">
+        SELECT
+        oi.order_id AS order_id,
+        p.id        AS id,
+        p.name      AS name,
+        p.gender    AS gender,
+        p.id_no     AS id_no,
+        p.phone     AS phone
+        FROM booking_order_item oi
+        JOIN passenger p ON p.id = oi.passenger_id
+        WHERE oi.order_id IN
+        <foreach collection="orderIds" item="oid" open="(" close=")" separator=",">
+            #{oid}
+        </foreach>
+        ORDER BY oi.order_id, p.id
+    </select>
+</mapper>

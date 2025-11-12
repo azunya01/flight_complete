@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.AdminPlaneMapper">
+
+    <!-- 基础字段：你当前 Plane 只有 id、name -->
+    <resultMap id="PlaneMap" type="com.sky.entity.Plane">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+    </resultMap>
+
+    <!-- CRUD -->
+    <insert id="insert" parameterType="com.sky.entity.Plane" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO plane (name)
+        VALUES (#{name})
+    </insert>
+    <insert id="insertPlaneSeatType">
+        INSERT INTO plane_seat_capacity(plane_id, seat_type_id, capacity,`row_number`) VALUES
+        (#{planeId}, #{seatTypeId}, #{capacity},#{rowNumber})
+    </insert>
+
+    <update id="update" parameterType="com.sky.entity.Plane">
+        UPDATE plane
+        SET name = #{name}
+        WHERE id = #{id}
+    </update>
+    <update id="updatePlaneSeatType">
+        UPDATE plane_seat_capacity
+        SET capacity = #{capacity}, `row_number` = #{rowNumber}
+        WHERE plane_id = #{planeId} AND seat_type_id = #{seatTypeId}
+    </update>
+
+    <delete id="deleteById" parameterType="int">
+        DELETE FROM plane WHERE id = #{id}
+    </delete>
+    <delete id="delectPlaneSeatTypesByPlaneId">
+        delete from plane_seat_capacity where plane_id = #{planeId}
+    </delete>
+
+    <select id="getById" parameterType="int" resultMap="PlaneMap">
+        SELECT id, name
+        FROM plane
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="getByName" parameterType="string" resultMap="PlaneMap">
+        SELECT id, name
+        FROM plane
+        WHERE name = #{name}
+        LIMIT 1
+    </select>
+
+    <!-- 全量分页 -->
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM plane
+    </select>
+
+    <select id="selectAllPaged" resultMap="PlaneMap">
+        SELECT id, name
+        FROM plane
+        ORDER BY id
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!-- 条件分页（name 模糊可选） -->
+    <select id="countByName" resultType="long">
+        SELECT COUNT(*)
+        FROM plane
+        <where>
+            <if test="name != null and name.trim() != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+        </where>
+    </select>
+
+    <select id="selectByNamePaged" resultMap="PlaneMap">
+        SELECT id, name
+        FROM plane
+        <where>
+            <if test="name != null and name.trim() != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+        </where>
+        ORDER BY id
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+    <!-- 取飞机的舱位容量模板 -->
+    <select id="getPlaneSeatCapacityByPlaneId"
+            parameterType="int"
+            resultType="com.sky.entity.PlaneSeatCapacity">
+        SELECT plane_id   AS planeId,
+               seat_type_id AS seatTypeId,
+               capacity,
+               `row_number`
+        FROM plane_seat_capacity
+        WHERE plane_id = #{planeId}
+    </select>
+    <!-- 关键：UPSERT（依赖 plane_seat_capacity 的主键 (plane_id, seat_type_id)） -->
+    <insert id="upsertPlaneSeatType">
+        INSERT INTO plane_seat_capacity(plane_id, seat_type_id, capacity, `row_number`)
+        VALUES (#{planeId}, #{seatTypeId}, #{capacity}, #{rowNumber})
+        ON DUPLICATE KEY UPDATE
+                             capacity   = VALUES(capacity),
+                             `row_number` = VALUES(`row_number`)
+    </insert>
+
+    <!-- 清理：删除本次未提交的 seat_type_id（实现“删除缺失”） -->
+    <delete id="deletePlaneSeatTypesNotIn">
+        DELETE FROM plane_seat_capacity
+        WHERE plane_id = #{planeId}
+        <if test="seatTypeIds != null and seatTypeIds.size() > 0">
+            AND seat_type_id NOT IN
+            <foreach collection="seatTypeIds" item="sid" open="(" close=")" separator=",">
+                #{sid}
+            </foreach>
+        </if>
+    </delete>
+
+    <!-- 可选：一键全部清空 -->
+    <delete id="deleteAllPlaneSeatTypes">
+        DELETE FROM plane_seat_capacity WHERE plane_id = #{planeId}
+    </delete>
+
+</mapper>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.AdminAirportMapper">
+
+    <insert id="insert" parameterType="com.sky.entity.Airport">
+            INSERT INTO airport(name, city, address, tel) VALUES
+            (#{name}, #{city}, #{address}, #{tel});
+    </insert>
+    <update id="update">
+      update airport
+        set name = #{name},
+            city = #{city},
+            address = #{address},
+            tel = #{tel}
+        where id = #{id};
+    </update>
+    <delete id="deleteById">
+        delete from airport
+        where id=#{id};
+    </delete>
+    <select id="getByName" resultType="com.sky.entity.Airport">
+        select * from airport
+        where name = #{name};
+    </select>
+    <select id="selectAllAirports" resultType="com.sky.entity.Airport">
+        select * from airport;
+    </select>
+    <select id="search" resultType="com.sky.entity.Airport">
+        SELECT id, name, city, address, tel
+        FROM airport
+        <where>
+            <if test="name != null and name.trim() != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+            <if test="city != null and city.trim() != ''">
+                AND city LIKE CONCAT('%', #{city}, '%')
+            </if>
+            <if test="address != null and address.trim() != ''">
+                AND address LIKE CONCAT('%', #{address}, '%')
+            </if>
+        </where>
+        ORDER BY id 
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM airport order by id 
+    </select>
+
+    <select id="selectAllPaged" resultType="com.sky.entity.Airport">
+        SELECT id, name, city, address, tel
+        FROM airport
+        ORDER BY id 
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+</mapper>

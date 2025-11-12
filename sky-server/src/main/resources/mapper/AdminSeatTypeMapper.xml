@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.AdminSeatTypeMapper">
+
+  <resultMap id="SeatTypeMap" type="com.sky.entity.SeatType">
+    <id     property="id"   column="id"/>
+    <result property="name" column="name"/>
+    <result property="code" column="code"/>
+  </resultMap>
+
+  <insert id="insert" parameterType="com.sky.entity.SeatType"
+          useGeneratedKeys="true" keyProperty="id">
+    INSERT INTO seat_type (name, code)
+    VALUES (#{name}, #{code})
+  </insert>
+
+  <update id="update" parameterType="com.sky.entity.SeatType">
+    UPDATE seat_type
+    SET
+      name = #{name},
+      code = #{code}
+    WHERE id = #{id}
+  </update>
+
+  <delete id="deleteById" parameterType="int">
+    DELETE FROM seat_type WHERE id = #{id}
+  </delete>
+
+  <select id="getById" parameterType="int" resultMap="SeatTypeMap">
+    SELECT id, name, code
+    FROM seat_type
+    WHERE id = #{id}
+    LIMIT 1
+  </select>
+
+  <select id="getByCode" parameterType="string" resultMap="SeatTypeMap">
+    SELECT id, name, code
+    FROM seat_type
+    WHERE code = #{code}
+    LIMIT 1
+  </select>
+
+  <select id="getByName" parameterType="string" resultMap="SeatTypeMap">
+    SELECT id, name, code
+    FROM seat_type
+    WHERE name = #{name}
+    LIMIT 1
+  </select>
+
+  <select id="selectAll" resultMap="SeatTypeMap">
+    SELECT id, name, code
+    FROM seat_type
+    ORDER BY id
+  </select>
+
+</mapper>

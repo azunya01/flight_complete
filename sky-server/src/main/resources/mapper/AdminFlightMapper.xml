@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.AdminFlightMapper">
+    <delete id="deleteFlightById">
+        delete from flight where id=#{id}
+    </delete>
+
+
+    <select id="getFlightByFlightName" parameterType="string" resultType="com.sky.entity.Flight">
+        SELECT id,
+               name,
+               plane_id        AS planeId,
+               airline_id      AS airlineId,
+               departure_time  AS departureTime,
+               arrival_time    AS arrivalTime
+        FROM flight
+        WHERE name = #{name}
+        LIMIT 1
+    </select>
+
+    <insert id="insertFlight" parameterType="com.sky.entity.Flight"
+            useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO flight (name, plane_id, airline_id, departure_time, arrival_time)
+        VALUES (#{name}, #{planeId}, #{airlineId}, #{departureTime}, #{arrivalTime})
+    </insert>
+
+
+
+    <!-- 直接映射到 com.sky.vo.FlightSeatVO -->
+    <select id="listSeatViewByFlightId" resultType="com.sky.vo.FlightSeatVO">
+        SELECT st.name         AS seatTypeName,
+               fsi.price       AS price,
+               fsi.available   AS available,
+               fsi.total       AS total
+        FROM flight_seat_inventory fsi
+                 JOIN seat_type st ON st.id = fsi.seat_type_id
+        WHERE fsi.flight_id = #{flightId}
+        ORDER BY st.id
+    </select>
+    <select id="getFlightById" parameterType="int" resultType="com.sky.entity.Flight">
+        SELECT id,
+               name,
+               plane_id       AS planeId,
+               airline_id     AS airlineId,
+               departure_time AS departureTime,
+               arrival_time   AS arrivalTime
+        FROM flight
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="countByNameExcludingId" resultType="int">
+        SELECT COUNT(1)
+        FROM flight
+        WHERE name = #{name} AND id != #{id}
+    </select>
+
+    <update id="updateFlight" parameterType="com.sky.entity.Flight">
+        UPDATE flight
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="planeId != null">plane_id = #{planeId},</if>
+            <if test="airlineId != null">airline_id = #{airlineId},</if>
+            <if test="departureTime != null">departure_time = #{departureTime},</if>
+            <if test="arrivalTime != null">arrival_time = #{arrivalTime},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteInventoryByFlightId">
+        DELETE FROM flight_seat_inventory WHERE flight_id = #{flightId}
+    </delete>
+
+    <insert id="batchInsertInventory">
+        INSERT INTO flight_seat_inventory (flight_id, seat_type_id, total, available, price)
+        VALUES
+        <foreach collection="list" item="it" separator=",">
+            (#{it.flightId}, #{it.seatTypeId}, #{it.total}, #{it.available}, #{it.price})
+        </foreach>
+    </insert>
+
+    <!-- 单条更新（available 裁剪到 total 以内；price 允许不变） -->
+    <update id="updateInventoryOne">
+        UPDATE flight_seat_inventory
+        <set>
+            <if test="price != null"> price = #{price}, </if>
+            <if test="available != null"> available = LEAST(#{available}, total), </if>
+        </set>
+        WHERE flight_id = #{flightId} AND seat_type_id = #{seatTypeId}
+    </update>
+
+    <!-- 总数 -->
+    <select id="countAllFlights" resultType="long">
+        SELECT COUNT(1) FROM flight
+    </select>
+
+    <!-- 分页列表：只取需要展示的字段 -->
+    <select id="pageFlightList" resultType="com.sky.vo.FlightVO">
+        SELECT
+            f.id                       AS id,
+            f.name                     AS name,
+            p.name                     AS planeName,
+            al.from_airport        AS departureAirportName,
+            al.to_airport               AS arrivalAirportName,
+            f.departure_time           AS departureTime,
+            f.arrival_time             AS arrivalTime
+            FROM flight f
+            LEFT JOIN plane   p        ON p.id = f.plane_id
+            LEFT JOIN airline al       ON al.id = f.airline_id
+        ORDER BY f.departure_time , f.id
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+    <!-- 航班头部视图：直接映射到 FlightVO（不含 seats） -->
+    <select id="getFlightViewById" parameterType="int" resultType="com.sky.vo.FlightVO">
+        SELECT
+            f.id                       AS id,
+            f.name                     AS name,
+            p.name                     AS planeName,
+            al.from_airport        AS departureAirportName,
+            al.to_airport               AS arrivalAirportName,
+            f.departure_time           AS departureTime,
+            f.arrival_time             AS arrivalTime
+            FROM flight f
+            LEFT JOIN plane   p        ON p.id = f.plane_id
+            LEFT JOIN airline al       ON al.id = f.airline_id
+            WHERE f.id = #{id}
+            ORDER BY f.departure_time , f.id
+
+        LIMIT 1
+    </select>
+</mapper>

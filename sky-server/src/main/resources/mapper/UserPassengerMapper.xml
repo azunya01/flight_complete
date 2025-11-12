@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.UserPassengerMapper">
+
+    <resultMap id="PassengerVOMap" type="com.sky.vo.PassengerVO">
+        <result property="name"   column="name"/>
+        <result property="gender" column="gender"/>
+        <result property="idNo"   column="id_no"/>
+        <result property="phone"  column="phone"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.sky.dto.PassengerCreateDTO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO passenger (user_id, name, gender, id_no, phone, created_at)
+        VALUES (#{userId}, #{name}, #{gender}, #{idNo}, #{phone}, NOW())
+    </insert>
+
+    <update id="update" parameterType="com.sky.dto.PassengerUpdateDTO">
+        UPDATE passenger
+        SET name = #{name},
+            gender = #{gender},
+            id_no = #{idNo},
+            phone = #{phone},
+            updated_at = NOW()
+        WHERE id = #{id} AND user_id = #{userId}
+    </update>
+
+    <delete id="deleteByIdAndUser">
+        DELETE FROM passenger
+        WHERE id = #{id} AND user_id = #{userId}
+    </delete>
+
+    <select id="getByIdAndUser" resultMap="PassengerVOMap">
+        SELECT id, name, gender, id_no, phone
+        FROM passenger
+        WHERE id = #{id} AND user_id = #{userId}
+        LIMIT 1
+    </select>
+
+    <select id="countByUserAndKeyword" resultType="long">
+        SELECT COUNT(*)
+        FROM passenger
+        <where>
+            user_id = #{userId}
+            <if test="kw != null and kw.trim() != ''">
+                AND (
+                name  LIKE CONCAT('%', #{kw}, '%')
+                OR id_no LIKE CONCAT('%', #{kw}, '%')
+                OR phone LIKE CONCAT('%', #{kw}, '%')
+                )
+            </if>
+        </where>
+    </select>
+
+    <select id="selectByUserAndKeywordPaged" resultMap="PassengerVOMap">
+        SELECT id, name, gender, id_no, phone
+        FROM passenger
+        <where>
+            user_id = #{userId}
+            <if test="kw != null and kw.trim() != ''">
+                AND (
+                name  LIKE CONCAT('%', #{kw}, '%')
+                OR id_no LIKE CONCAT('%', #{kw}, '%')
+                OR phone LIKE CONCAT('%', #{kw}, '%')
+                )
+            </if>
+        </where>
+        ORDER BY id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+    <select id="getByUserAndIdNo" resultMap="PassengerVOMap">
+        SELECT id, name, gender, id_no, phone
+        FROM passenger
+        WHERE user_id = #{userId} AND id_no = #{idNo}
+        LIMIT 1
+    </select>
+</mapper>

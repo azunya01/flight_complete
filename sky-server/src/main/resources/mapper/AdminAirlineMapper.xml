@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.AdminAirlineMapper">
+    <insert id="insert" keyColumn="id" useGeneratedKeys="true">
+        insert into airline(from_airport, to_airport) VALUES
+        (#{fromAirport}, #{toAirport});
+    </insert>
+    <update id="update">
+        update airline
+        set from_airport = #{fromAirport},
+            to_airport = #{toAirport}
+        where id = #{id};
+    </update>
+
+    <delete id="delectAirlineById">
+        delete from airline where id = #{id};
+    </delete>
+
+    <select id="getByFromTo" resultType="com.sky.entity.Airline">
+        select * from airline
+        where from_airport = #{fromAirport} and from_airport = #{toAirport}
+    </select>
+    <select id="getById" resultType="com.sky.entity.Airline">
+        select * from airline
+        where id = #{id}
+    </select>
+    <!-- 全量统计 + 分页 -->
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM airline
+    </select>
+
+    <select id="selectAllPaged" resultType="com.sky.entity.Airline">
+        SELECT id, from_airport, to_airport
+        FROM airline
+        ORDER BY id 
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!-- 按 from/to 条件统计 + 分页 -->
+    <select id="countByFromTo" resultType="long">
+        SELECT COUNT(*)
+        FROM airline
+        WHERE from_airport = #{fromAirport}
+          AND to_airport   = #{toAirport}
+        order by id 
+    </select>
+
+    <select id="selectByFromToPaged" resultType="com.sky.entity.Airline">
+        SELECT id, from_airport, to_airport
+        FROM airline
+        WHERE from_airport = #{fromAirport}
+          AND to_airport   = #{toAirport}
+        ORDER BY id 
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+</mapper>

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.UserFlightSearchMapper">
+
+    <resultMap id="UserFlightListMap" type="com.sky.vo.UserFlightVO">
+        <id     property="id"                    column="id"/>
+        <result property="name"                  column="name"/>
+        <result property="departureAirportName"  column="dep_airport_name"/>
+        <result property="arrivalAirportName"    column="arr_airport_name"/>
+        <result property="departureTime"         column="departure_time"/>
+        <result property="arrivalTime"           column="arrival_time"/>
+        <result property="leastPrice" column="least_price"/>
+        <result property="seatNumber" column="seat_number"/>
+    </resultMap>
+
+    <!-- 总数 -->
+    <select id="countByCitiesAndDate" resultType="long">
+<![CDATA[
+    SELECT COUNT(1)
+        FROM flight f
+        JOIN airline a   ON a.id = f.airline_id
+        JOIN airport dep ON dep.name = a.from_airport
+        JOIN airport arr ON arr.name = a.to_airport
+        WHERE dep.city = #{fromCity}
+        AND arr.city = #{toCity}
+        AND f.departure_time >= #{start}
+        AND f.departure_time < #{end}
+]]>
+
+
+    </select>
+
+    <!-- 分页列表（按城市+日期；聚合最低价&余票数） -->
+    <select id="selectByCitiesAndDate" resultMap="UserFlightListMap">
+  <![CDATA[
+        SELECT f.id,
+               f.name,
+               dep.name                        AS dep_airport_name,
+               arr.name                        AS arr_airport_name,
+               f.departure_time,
+               f.arrival_time,
+               MIN(fsi.price)                  AS least_price,
+               COALESCE(SUM(fsi.available), 0) AS seat_number
+        FROM flight f
+                 JOIN airline a ON a.id = f.airline_id
+                 JOIN airport dep ON dep.name = a.from_airport
+                 JOIN airport arr ON arr.name = a.to_airport
+                 LEFT JOIN flight_seat_inventory fsi ON fsi.flight_id = f.id
+        WHERE dep.city = #{fromCity}
+          AND arr.city = #{toCity}
+          AND f.departure_time >= #{start}
+          AND f.departure_time < #{end}
+        GROUP BY f.id, f.name, dep.name, arr.name, f.departure_time, f.arrival_time
+        ORDER BY f.departure_time, f.id
+        LIMIT #{size} OFFSET #{offset}
+        ]]>
+</select>
+
+    <select id="listCities" resultType="string">
+        SELECT DISTINCT city
+        FROM airport
+        <where>
+            <if test="keyword != null and keyword.trim() != ''">
+                AND city LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY city ASC
+    </select>
+
+</mapper>

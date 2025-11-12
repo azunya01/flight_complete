@@ -1,0 +1,46 @@
+# ---- Java / Spring ----
+target/
+build/
+out/
+*.log
+*.iml
+*.class
+*.jar
+*.war
+
+# ---- Maven / Gradle ----
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+.mvn/wrapper/MavenWrapperDownloader.java
+.mvn/
+.gradle/
+gradle-app.setting
+gradlew
+gradlew.bat
+
+# ---- IntelliJ / Eclipse / VSCode ----
+.idea/
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.vscode/
+
+# ---- Node / Vite / Vue ----
+node_modules/
+dist/
+.vite/
+*.local
+*.cache
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# ---- Env / OS ----
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
+sky-server/src/main/resources/application-dev.yml
